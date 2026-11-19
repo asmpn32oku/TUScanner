@@ -86,10 +86,34 @@ h2{font:600 17px Georgia,serif;margin:0}
 <div class="row">
 <button class="btn pri" id="pdf">Simpan PDF ke ponsel</button>
 <button class="btn" id="jpg">Simpan JPG</button>
+<button class="btn pri" id="arsip">Arsipkan ke Drive TU</button>
 </div>
 <p class="hint">Tombol simpan membuka menu bagikan ponsel (pilih Files atau Galeri). Jika tidak tersedia, berkas diunduh biasa. PDF tidak memakai watermark.</p>
 </section>
 
+
+<section id="s5" hidden>
+<h2>Arsipkan ke Drive TU</h2>
+<div class="fld"><label for="jn">Jenis surat</label>
+<select id="jn"><option value="masuk">Surat masuk</option><option value="keluar">Surat keluar</option></select></div>
+<div class="fld"><label for="tg">Tanggal surat</label><input id="tg" type="date"></div>
+<div class="fld"><label for="no">Nomor surat</label><input id="no" type="text" placeholder="045/SMK/VIII/2026" autocomplete="off"></div>
+<div class="fld"><label for="ph" id="lph">Pengirim</label><input id="ph" type="text" autocomplete="off"></div>
+<div class="fld"><label for="pr">Perihal / nama surat</label><input id="pr" type="text" placeholder="Undangan lomba 17 Agustus" autocomplete="off"></div>
+<div class="fld"><label for="pt5">Nama petugas</label><input id="pt5" type="text" autocomplete="off"></div>
+<p class="hint" id="ms" role="status"></p>
+<a id="lk" hidden target="_blank" rel="noopener">Buka berkas di Drive</a>
+<div class="row">
+<button class="btn" id="bt">Kembali</button>
+<button class="btn pri" id="kr">Unggah ke Drive</button>
+</div>
+</section>
+<style>
+.fld{margin-top:12px}
+.fld label{display:block;font-size:14px;font-weight:600;margin-bottom:4px}
+.fld input,.fld select{width:100%;min-height:46px;padding:8px 10px;border:1.5px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:16px inherit;font-family:inherit}
+#lk{display:inline-block;margin-top:8px;color:var(--pri);font-weight:600}
+</style>
 </main>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
@@ -137,34 +161,54 @@ function order(p){
   return [p[sum.indexOf(Math.min(...sum))],p[dif.indexOf(Math.min(...dif))],
           p[sum.indexOf(Math.max(...sum))],p[dif.indexOf(Math.max(...dif))]];
 }
+function quadOf(t){
+  const hull=new cv.Mat();let pts=null;
+  try{
+    cv.convexHull(t,hull,false,true);
+    const per=cv.arcLength(hull,true);
+    for(let e=0.02;e<=0.12;e+=0.01){
+      const ap=new cv.Mat();cv.approxPolyDP(hull,ap,e*per,true);
+      if(ap.rows===4){pts=[];for(let j=0;j<4;j++)pts.push([ap.data32S[j*2],ap.data32S[j*2+1]]);ap.delete();break}
+      ap.delete();
+    }
+    if(!pts){const v=cv.RotatedRect.points(cv.minAreaRect(hull));pts=v.map(p=>[p.x,p.y])}
+  }catch(x){pts=null}
+  hull.delete();return pts;
+}
 function detect(cn){
   if(!ready)return null;
-  let m=[],best=null;
+  const sc=Math.min(1,600/Math.max(cn.width,cn.height));
+  const ms=[];let res=null;
   try{
-    const s=cv.imread(cn),g=new cv.Mat(),e=new cv.Mat();m.push(s,g,e);
-    cv.cvtColor(s,g,cv.COLOR_RGBA2GRAY);
-    cv.GaussianBlur(g,g,new cv.Size(5,5),0);
-    cv.Canny(g,e,50,150);
-    const k=cv.Mat.ones(5,5,cv.CV_8U);m.push(k);
-    cv.dilate(e,e,k);
-    const cs=new cv.MatVector(),h=new cv.Mat();m.push(cs,h);
-    cv.findContours(e,cs,h,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE);
-    let ba=cn.width*cn.height*0.12;
-    for(let i=0;i<cs.size();i++){
-      const t=cs.get(i),a=cv.contourArea(t);
-      if(a>ba){
-        const ap=new cv.Mat();
-        cv.approxPolyDP(t,ap,0.02*cv.arcLength(t,true),true);
-        if(ap.rows===4&&cv.isContourConvex(ap)){
-          best=[];for(let j=0;j<4;j++)best.push([ap.data32S[j*2],ap.data32S[j*2+1]]);ba=a;
-        }
-        ap.delete();
+    const big=cv.imread(cn),sm=new cv.Mat(),g=new cv.Mat();ms.push(big,sm,g);
+    cv.resize(big,sm,new cv.Size(Math.round(cn.width*sc),Math.round(cn.height*sc)),0,0,cv.INTER_AREA);
+    cv.cvtColor(sm,g,cv.COLOR_RGBA2GRAY);
+    cv.GaussianBlur(g,g,new cv.Size(7,7),0);
+    const W=g.cols,H=g.rows,tot=W*H;
+    const k=cv.getStructuringElement(cv.MORPH_RECT,new cv.Size(7,7));ms.push(k);
+    for(let m=0;m<3&&!res;m++){
+      const b=new cv.Mat();ms.push(b);
+      if(m===0){cv.Canny(g,b,30,100);cv.dilate(b,b,k);cv.morphologyEx(b,b,cv.MORPH_CLOSE,k)}
+      else{
+        cv.threshold(g,b,0,255,(m===1?cv.THRESH_BINARY:cv.THRESH_BINARY_INV)+cv.THRESH_OTSU);
+        cv.morphologyEx(b,b,cv.MORPH_OPEN,k);cv.morphologyEx(b,b,cv.MORPH_CLOSE,k);
       }
-      t.delete();
+      cv.rectangle(b,new cv.Point(0,0),new cv.Point(W-1,H-1),new cv.Scalar(0),4);
+      const cs=new cv.MatVector(),h=new cv.Mat();ms.push(cs,h);
+      cv.findContours(b,cs,h,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
+      let bi=-1,ba=0;
+      for(let i=0;i<cs.size();i++){
+        const a=cv.contourArea(cs.get(i));
+        if(a>tot*.15&&a<tot*.95&&a>ba){ba=a;bi=i}
+      }
+      if(bi>=0){
+        const q=quadOf(cs.get(bi));
+        if(q&&q.length===4)res=q.map(p=>[Math.max(0,Math.min(W,p[0]))/sc,Math.max(0,Math.min(H,p[1]))/sc]);
+      }
     }
-  }catch(x){best=null}
-  m.forEach(a=>{try{a.delete()}catch(_){}});
-  return best?order(best):null;
+  }catch(x){res=null}
+  ms.forEach(a=>{try{a.delete()}catch(_){}});
+  return res?order(res):null;
 }
 function inset(){
   const w=c.width,h=c.height,x=w*.08,y=h*.08;
@@ -323,6 +367,57 @@ $('jpg').onclick=async()=>{
   for(let i=0;i<pages.length;i++)fs.push(new File([await blobOf(pages[i],.9)],'Scan_'+stamp()+'_'+(i+1)+'.jpg',{type:'image/jpeg'}));
   deliver(fs);
 };
+</script>
+<script>
+/* Alamat web app GAS (hasil Deploy), contoh: https://script.google.com/macros/s/XXXX/exec */
+const GAS_URL='https://script.google.com/macros/s/AKfycbxVWRm_AGp5DdTIkiJW6kVzyQ5-WgrhfjMCelCEASXe6eB2THdFjAggmj6OBqUBSOkC/exec';
+
+function makePdf(q){
+  const {jsPDF}=window.jspdf,W=210;let pdf;
+  pages.forEach((p,i)=>{
+    const H=W*p.height/p.width,o=H>W?'p':'l';
+    if(i===0)pdf=new jsPDF({unit:'mm',format:[W,H],orientation:o});else pdf.addPage([W,H],o);
+    pdf.addImage(p.toDataURL('image/jpeg',q),'JPEG',0,0,W,H);
+  });
+  return pdf;
+}
+const msg=t=>{$('ms').textContent=t};
+function labelPihak(){$('lph').textContent=$('jn').value==='masuk'?'Pengirim':'Tujuan (penerima surat)'}
+$('jn').onchange=labelPihak;
+$('arsip').onclick=()=>{
+  ['s1','s2','s3','s4'].forEach(k=>$(k).hidden=true);$('s5').hidden=false;
+  if(!$('tg').value)$('tg').value=new Date().toISOString().slice(0,10);
+  try{$('pt5').value=$('pt5').value||localStorage.getItem('petugas')||''}catch(e){}
+  $('lk').hidden=true;msg('');labelPihak();
+};
+$('bt').onclick=()=>{$('s5').hidden=true;show('s1');$('s4').hidden=!pages.length};
+async function kirim(force){
+  const v=id=>$(id).value.trim();
+  if(!GAS_URL){msg('Alamat GAS belum diisi. Isi GAS_URL di index.html.');return}
+  if(!v('tg')||!v('no')||!v('ph')||!v('pr')){msg('Lengkapi tanggal, nomor, pengirim atau tujuan, dan perihal.');return}
+  const b=$('kr');b.disabled=true;msg('Mengunggah, mohon tunggu…');
+  try{localStorage.setItem('petugas',v('pt5'))}catch(e){}
+  try{
+    const b64=makePdf(.75).output('datauristring').split(',')[1];
+    const res=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({jenis:$('jn').value,tanggal:v('tg'),nomor:v('no'),pihak:v('ph'),perihal:v('pr'),petugas:v('pt5'),force:!!force,pdf:b64})});
+    const j=await res.json();
+    if(j.duplicate){
+      b.disabled=false;
+      if(confirm('Nomor surat ini sudah pernah diarsipkan. Tetap unggah sebagai arsip baru?'))return kirim(true);
+      msg('Dibatalkan. Periksa nomor surat.');return;
+    }
+    if(j.ok){
+      msg('Tersimpan sebagai '+j.nama);
+      $('lk').href=j.link;$('lk').hidden=false;
+      pages=[];listPages();$('s4').hidden=true;
+      ['no','ph','pr'].forEach(k=>$(k).value='');
+      $('bt').textContent='Pindai surat lain';
+    }else msg('Gagal: '+j.error);
+  }catch(e){msg('Gagal terhubung ke server. Periksa internet dan alamat GAS_URL.')}
+  b.disabled=false;
+}
+$('kr').onclick=()=>kirim(false);
 </script>
 </body>
 </html>
