@@ -97,7 +97,10 @@ h2{font:600 17px Georgia,serif;margin:0}
 <div class="fld"><label for="jn">Jenis surat</label>
 <select id="jn"><option value="masuk">Surat masuk</option><option value="keluar">Surat keluar</option></select></div>
 <div class="fld"><label for="tg">Tanggal surat</label><input id="tg" type="date"></div>
-<div class="fld"><label for="no">Nomor surat</label><input id="no" type="text" placeholder="045/SMK/VIII/2026" autocomplete="off"></div>
+<div class="fld" id="fno"><label for="no">Nomor surat</label><input id="no" type="text" placeholder="045/SMK/VIII/2026" autocomplete="off"></div>
+<div class="fld" id="fnk" hidden><label for="nm">Nomor surat keluar</label>
+<div class="nk"><span id="na"></span><input id="nm" type="text" placeholder="isi" autocomplete="off"><span id="nb"></span></div>
+<p class="hint" id="nh"></p></div>
 <div class="fld"><label for="ph" id="lph">Pengirim</label><input id="ph" type="text" autocomplete="off"></div>
 <div class="fld"><label for="pr">Perihal / nama surat</label><input id="pr" type="text" placeholder="Undangan lomba 17 Agustus" autocomplete="off"></div>
 <div class="fld"><label for="pt5">Nama petugas</label><input id="pt5" type="text" autocomplete="off"></div>
@@ -112,6 +115,8 @@ h2{font:600 17px Georgia,serif;margin:0}
 .fld{margin-top:12px}
 .fld label{display:block;font-size:14px;font-weight:600;margin-bottom:4px}
 .fld input,.fld select{width:100%;min-height:46px;padding:8px 10px;border:1.5px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:16px inherit;font-family:inherit}
+.nk{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:600}
+.nk input{width:auto;flex:1 1 90px;min-width:90px}
 #lk{display:inline-block;margin-top:8px;color:var(--pri);font-weight:600}
 </style>
 </main>
@@ -370,7 +375,7 @@ $('jpg').onclick=async()=>{
 </script>
 <script>
 /* Alamat web app GAS (hasil Deploy), contoh: https://script.google.com/macros/s/XXXX/exec */
-const GAS_URL='https://script.google.com/macros/s/AKfycbxVWRm_AGp5DdTIkiJW6kVzyQ5-WgrhfjMCelCEASXe6eB2THdFjAggmj6OBqUBSOkC/exec';
+const GAS_URL='';
 
 function makePdf(q){
   const {jsPDF}=window.jspdf,W=210;let pdf;
@@ -382,7 +387,7 @@ function makePdf(q){
   return pdf;
 }
 const msg=t=>{$('ms').textContent=t};
-function labelPihak(){$('lph').textContent=$('jn').value==='masuk'?'Pengirim':'Tujuan (penerima surat)'}
+function labelPihak(){$('lph').textContent=$('jn').value==='masuk'?'Pengirim':'Tujuan (penerima surat)';nomorUI()}
 $('jn').onchange=labelPihak;
 $('arsip').onclick=()=>{
   ['s1','s2','s3','s4'].forEach(k=>$(k).hidden=true);$('s5').hidden=false;
@@ -394,16 +399,18 @@ $('bt').onclick=()=>{$('s5').hidden=true;show('s1');$('s4').hidden=!pages.length
 async function kirim(force){
   const v=id=>$(id).value.trim();
   if(!GAS_URL){msg('Alamat GAS belum diisi. Isi GAS_URL di index.html.');return}
-  if(!v('tg')||!v('no')||!v('ph')||!v('pr')){msg('Lengkapi tanggal, nomor, pengirim atau tujuan, dan perihal.');return}
+  if($('jn').value==='keluar'&&!/^[0-9A-Za-z.\-]+$/.test(bersih($('nm').value))){msg('Isi bagian nomor dengan angka atau huruf saja, tanpa garis miring.');return}
+  if(!v('tg')||($('jn').value==='keluar'?!bersih($('nm').value):!v('no'))||!v('ph')||!v('pr')){msg('Lengkapi tanggal, nomor, pengirim atau tujuan, dan perihal.');return}
   const b=$('kr');b.disabled=true;msg('Mengunggah, mohon tunggu…');
   try{localStorage.setItem('petugas',v('pt5'))}catch(e){}
   try{
     const b64=makePdf(.75).output('datauristring').split(',')[1];
     const res=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body:JSON.stringify({jenis:$('jn').value,tanggal:v('tg'),nomor:v('no'),pihak:v('ph'),perihal:v('pr'),petugas:v('pt5'),force:!!force,pdf:b64})});
+      body:JSON.stringify({jenis:$('jn').value,tanggal:v('tg'),nomor:nomorFinal(),pihak:v('ph'),perihal:v('pr'),petugas:v('pt5'),force:!!force,pdf:b64})});
     const j=await res.json();
     if(j.duplicate){
       b.disabled=false;
+      if($('jn').value==='keluar'){msg(j.error);return}
       if(confirm('Nomor surat ini sudah pernah diarsipkan. Tetap unggah sebagai arsip baru?'))return kirim(true);
       msg('Dibatalkan. Periksa nomor surat.');return;
     }
@@ -411,12 +418,45 @@ async function kirim(force){
       msg('Tersimpan sebagai '+j.nama);
       $('lk').href=j.link;$('lk').hidden=false;
       pages=[];listPages();$('s4').hidden=true;
-      ['no','ph','pr'].forEach(k=>$(k).value='');
+      ['no','nm','ph','pr'].forEach(k=>$(k).value='');
       $('bt').textContent='Pindai surat lain';
     }else msg('Gagal: '+j.error);
   }catch(e){msg('Gagal terhubung ke server. Periksa internet dan alamat GAS_URL.')}
   b.disabled=false;
 }
+/* ---- Nomor surat keluar: bagian tetap dikunci, hanya bagian tengah diisi ---- */
+const NO_AWAL='420/',NO_AKHIR='/SMPN32OKU/XV/'; /* tahun di belakang mengikuti tanggal surat */
+let daftarKeluar=[];
+const tahunForm=()=>($('tg').value||'').slice(0,4)||String(new Date().getFullYear());
+const normNo=s=>String(s).toUpperCase().replace(/\s+/g,'').replace(/(^|[^0-9])0+(?=[0-9])/g,'$1');
+const bersih=s=>String(s).trim().replace(/\s+/g,'').replace(/\//g,'');
+function nomorFinal(){return $('jn').value==='keluar'?NO_AWAL+bersih($('nm').value)+NO_AKHIR+tahunForm():$('no').value.trim()}
+function tengah(n){if(!n.startsWith(NO_AWAL))return '';const x=n.slice(NO_AWAL.length),i=x.indexOf(NO_AKHIR);return i<0?'':x.slice(0,i)}
+function cekNomor(){
+  const nums=daftarKeluar.map(tengah).map(m=>parseInt(m,10)).filter(n=>!isNaN(n));
+  const mx=nums.length?Math.max(...nums):0;
+  let t=nums.length?'Nomor terakhir tercatat: '+mx+'. Usulan berikutnya: '+(mx+1)+'.':'Belum ada nomor surat keluar tahun ini yang tercatat.';
+  const cur=bersih($('nm').value);
+  if(cur){
+    const full=NO_AWAL+cur+NO_AKHIR+tahunForm();
+    t=daftarKeluar.some(n=>normNo(n)===normNo(full))?'Nomor '+full+' SUDAH terpakai. Gunakan nomor lain.':'Nomor lengkap: '+full+'. '+t;
+  }
+  $('nh').textContent=t;
+}
+async function muatDaftar(){
+  if(!GAS_URL){$('nh').textContent='GAS_URL belum diisi.';return}
+  $('nh').textContent='Memuat daftar nomor…';
+  try{
+    const r=await fetch(GAS_URL+'?action=list&jenis=keluar&tahun='+tahunForm()),j=await r.json();
+    daftarKeluar=j.ok?j.data.map(d=>String(d.nomor_surat)):[];cekNomor();
+  }catch(e){$('nh').textContent='Daftar nomor belum bisa dimuat. Pemeriksaan tetap dilakukan saat unggah.'}
+}
+function nomorUI(){
+  const k=$('jn').value==='keluar';
+  $('fno').hidden=k;$('fnk').hidden=!k;
+  if(k){$('na').textContent=NO_AWAL;$('nb').textContent=NO_AKHIR+tahunForm();muatDaftar()}
+}
+$('nm').oninput=cekNomor;$('tg').onchange=nomorUI;
 $('kr').onclick=()=>kirim(false);
 </script>
 </body>
