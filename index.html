@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#14532d">
-<title>Pindai Dokumen</title>
+<title>Pindai Surat TU</title>
 <style>
 :root{--bg:#f6f5f0;--card:#fff;--ink:#1c1f1a;--mut:#62675d;--line:#d9d8cf;--pri:#14532d;--onpri:#fff;--acc:#d9822b}
 @media (prefers-color-scheme:dark){:root{--bg:#141612;--card:#1e211b;--ink:#ecece4;--mut:#a0a597;--line:#383c33;--pri:#7ccf98;--onpri:#10200f;--acc:#f0a050}}
@@ -40,7 +40,7 @@ h2{font:600 17px Georgia,serif;margin:0}
 </head>
 <body>
 <header>
-<h1>Pindai Dokumen</h1>
+<h1>Pindai Surat TU</h1>
 <span id="st">Memuat mesin gambar…</span>
 </header>
 <main>
@@ -51,7 +51,7 @@ h2{font:600 17px Georgia,serif;margin:0}
 <label class="btn pri">Ambil foto<input id="cam" type="file" accept="image/*" capture="environment" hidden></label>
 <label class="btn">Pilih dari galeri<input id="gal" type="file" accept="image/*" hidden></label>
 </div>
-<p class="hint">Letakkan dokumen di permukaan gelap dan rata agar tepinya terdeteksi dengan baik. Semua diproses di ponsel Anda, tidak ada yang dikirim ke server.</p>
+<p class="hint">Letakkan dokumen di permukaan gelap dan rata agar tepinya terdeteksi dengan baik. Foto diproses di ponsel Anda dan baru dikirim ke Drive TU saat Anda menekan Unggah.</p>
 </section>
 
 <section id="s2" hidden>
@@ -84,11 +84,9 @@ h2{font:600 17px Georgia,serif;margin:0}
 <h2 id="pt">Halaman</h2>
 <div id="pg" style="margin-top:12px"></div>
 <div class="row">
-<button class="btn pri" id="pdf">Simpan PDF ke ponsel</button>
-<button class="btn" id="jpg">Simpan JPG</button>
 <button class="btn pri" id="arsip">Arsipkan ke Drive TU</button>
 </div>
-<p class="hint">Tombol simpan membuka menu bagikan ponsel (pilih Files atau Galeri). Jika tidak tersedia, berkas diunduh biasa. PDF tidak memakai watermark.</p>
+<p class="hint">Periksa halaman di atas, lalu arsipkan. Semua halaman digabung menjadi satu berkas PDF.</p>
 </section>
 
 
@@ -103,7 +101,6 @@ h2{font:600 17px Georgia,serif;margin:0}
 <p class="hint" id="nh"></p></div>
 <div class="fld"><label for="ph" id="lph">Pengirim</label><input id="ph" type="text" autocomplete="off"></div>
 <div class="fld"><label for="pr">Perihal / nama surat</label><input id="pr" type="text" placeholder="Undangan lomba 17 Agustus" autocomplete="off"></div>
-<div class="fld"><label for="pt5">Nama petugas</label><input id="pt5" type="text" autocomplete="off"></div>
 <p class="hint" id="ms" role="status"></p>
 <a id="lk" hidden target="_blank" rel="noopener">Buka berkas di Drive</a>
 <div class="row">
@@ -337,45 +334,13 @@ function listPages(){
     d.append(im,x,l);box.appendChild(d);
   });
   $('s4').hidden=!pages.length;
-  $('pt').textContent=pages.length+' halaman siap disimpan';
+  $('pt').textContent=pages.length+' halaman siap diarsipkan';
 }
 
-/* ---- Ekspor ---- */
-const stamp=()=>{const n=new Date(),p=v=>String(v).padStart(2,'0');return n.getFullYear()+p(n.getMonth()+1)+p(n.getDate())+'_'+p(n.getHours())+p(n.getMinutes())};
-const blobOf=(cn,q)=>new Promise(res=>cn.toBlob(res,'image/jpeg',q));
-async function deliver(files){
-  if(navigator.canShare&&navigator.canShare({files})){
-    try{await navigator.share({files});return}catch(e){if(e.name==='AbortError')return}
-  }
-  files.forEach((f,i)=>setTimeout(()=>{
-    const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;a.click();
-    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
-  },i*400));
-}
-$('pdf').onclick=async()=>{
-  const btn=$('pdf');btn.disabled=true;
-  try{
-    const {jsPDF}=window.jspdf,W=210;
-    let pdf;
-    for(let i=0;i<pages.length;i++){
-      const p=pages[i],H=W*p.height/p.width;
-      if(i===0)pdf=new jsPDF({unit:'mm',format:[W,H],orientation:H>W?'p':'l'});else pdf.addPage([W,H],H>W?'p':'l');
-      pdf.addImage(p.toDataURL('image/jpeg',.85),'JPEG',0,0,W,H);
-    }
-    const name='Scan_'+stamp()+'.pdf';
-    await deliver([new File([pdf.output('blob')],name,{type:'application/pdf'})]);
-  }catch(e){toast('PDF gagal dibuat. Coba kurangi jumlah halaman.')}
-  btn.disabled=false;
-};
-$('jpg').onclick=async()=>{
-  const fs=[];
-  for(let i=0;i<pages.length;i++)fs.push(new File([await blobOf(pages[i],.9)],'Scan_'+stamp()+'_'+(i+1)+'.jpg',{type:'image/jpeg'}));
-  deliver(fs);
-};
 </script>
 <script>
 /* Alamat web app GAS (hasil Deploy), contoh: https://script.google.com/macros/s/XXXX/exec */
-const GAS_URL='https://script.google.com/macros/s/AKfycbxL0L_hHp-shsj0hkKWEgHbPXpvzyTXL8V0sW_D_P59AZdFWXGjKUKEQGKhcvMT4yVG/exec';
+const GAS_URL='';
 
 function makePdf(q){
   const {jsPDF}=window.jspdf,W=210;let pdf;
@@ -392,7 +357,6 @@ $('jn').onchange=labelPihak;
 $('arsip').onclick=()=>{
   ['s1','s2','s3','s4'].forEach(k=>$(k).hidden=true);$('s5').hidden=false;
   if(!$('tg').value)$('tg').value=new Date().toISOString().slice(0,10);
-  try{$('pt5').value=$('pt5').value||localStorage.getItem('petugas')||''}catch(e){}
   $('lk').hidden=true;msg('');labelPihak();
 };
 $('bt').onclick=()=>{$('s5').hidden=true;show('s1');$('s4').hidden=!pages.length};
@@ -402,11 +366,10 @@ async function kirim(force){
   if($('jn').value==='keluar'&&!/^[0-9A-Za-z.\-]+$/.test(bersih($('nm').value))){msg('Isi bagian nomor dengan angka atau huruf saja, tanpa garis miring.');return}
   if(!v('tg')||($('jn').value==='keluar'?!bersih($('nm').value):!v('no'))||!v('ph')||!v('pr')){msg('Lengkapi tanggal, nomor, pengirim atau tujuan, dan perihal.');return}
   const b=$('kr');b.disabled=true;msg('Mengunggah, mohon tunggu…');
-  try{localStorage.setItem('petugas',v('pt5'))}catch(e){}
   try{
     const b64=makePdf(.75).output('datauristring').split(',')[1];
     const res=await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body:JSON.stringify({jenis:$('jn').value,tanggal:v('tg'),nomor:nomorFinal(),pihak:v('ph'),perihal:v('pr'),petugas:v('pt5'),force:!!force,pdf:b64})});
+      body:JSON.stringify({jenis:$('jn').value,tanggal:v('tg'),nomor:nomorFinal(),pihak:v('ph'),perihal:v('pr'),force:!!force,pdf:b64})});
     const j=await res.json();
     if(j.duplicate){
       b.disabled=false;
